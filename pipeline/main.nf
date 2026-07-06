@@ -4,11 +4,24 @@
 nextflow.enable.dsl = 1
 
 params.ecephys_url = 's3://aind-private-data-prod-o5171v/ecephys_715710_2024-07-16_12-58-34'
+// Step-arg defaults so a no-parameter (API) launch runs a short DI-arm smoke:
+// job_dispatch clips the recording to 30 s in debug mode BEFORE deepinterp, keeping
+// the DeepInterpolation step (which runs on the full recording) tractable.
+params.capsule_job_dispatch_ecephys_1_args = '--input aind --debug --debug-duration 30'
+params.capsule_hybrid_generation_ecephys_2_args = ''
+params.capsule_deepinterp_ecephys_args = ''
+params.capsule_preprocess_ecephys_3_args = ''
+params.capsule_spikesort_kilosort_25_ecephys_4_args = ''
+params.capsule_spikesort_kilosort_4_ecephys_5_args = ''
+params.capsule_spikesort_spyking_circus_2_ecephys_7_args = ''
+params.capsule_hybrid_evaluation_ecephys_6_args = ''
 
 ecephys_to_job_dispatch_ecephys_1 = channel.fromPath(params.ecephys_url + "/", type: 'any')
 capsule_job_dispatch_ecephys_1_to_capsule_hybrid_generation_ecephys_2_2 = channel.create()
 ecephys_to_hybrid_generation_ecephys_3 = channel.fromPath(params.ecephys_url + "/", type: 'any')
 capsule_hybrid_generation_ecephys_2_to_capsule_preprocess_ecephys_3_4 = channel.create()
+capsule_deepinterp_ecephys_to_capsule_preprocess = channel.create()
+ecephys_to_deepinterp = channel.fromPath(params.ecephys_url + "/", type: 'any')
 ecephys_to_preprocess_ecephys_5 = channel.fromPath(params.ecephys_url + "/", type: 'any')
 capsule_preprocess_ecephys_3_to_capsule_spikesort_kilosort_25_ecephys_4_6 = channel.create()
 capsule_preprocess_ecephys_3_to_capsule_spikesort_kilosort_4_ecephys_5_7 = channel.create()
@@ -107,6 +120,52 @@ process capsule_hybrid_generation_ecephys_2 {
 	"""
 }
 
+// capsule - DeepInterpolation Denoise Ecephys
+process capsule_deepinterp_ecephys {
+	tag 'capsule-6392476'
+	container "$REGISTRY_HOST/capsule/fa034446-63c2-40f3-8a39-a95ea2b4f5fd:0a3dfd99ab22fb1483ae243a56f9680f"
+
+	cpus 16
+	memory '64 GB'
+	accelerator 1
+	label 'gpu'
+
+	input:
+	path 'capsule/data/' from capsule_hybrid_generation_ecephys_2_to_capsule_preprocess_ecephys_3_4.flatten()
+	path 'capsule/data/ecephys_session' from ecephys_to_deepinterp.collect()
+
+	output:
+	path 'capsule/results/*' into capsule_deepinterp_ecephys_to_capsule_preprocess
+
+	script:
+	"""
+	#!/usr/bin/env bash
+	set -e
+
+	export CO_CAPSULE_ID=fa034446-63c2-40f3-8a39-a95ea2b4f5fd
+	export CO_CPUS=16
+	export CO_MEMORY=68719476736
+
+	mkdir -p capsule
+	mkdir -p capsule/data && ln -s \$PWD/capsule/data /data
+	mkdir -p capsule/results && ln -s \$PWD/capsule/results /results
+	mkdir -p capsule/scratch && ln -s \$PWD/capsule/scratch /scratch
+
+	echo "[${task.tag}] cloning git repo..."
+	git clone "https://\$GIT_ACCESS_TOKEN@\$GIT_HOST/capsule-6392476.git" capsule-repo
+	git -C capsule-repo checkout 8233a09534606750a240b24b6cd6d9509eba4bc9 --quiet
+	mv capsule-repo/code capsule/code
+	rm -rf capsule-repo
+
+	echo "[${task.tag}] running capsule..."
+	cd capsule/code
+	chmod +x run
+	./run ${params.capsule_deepinterp_ecephys_args}
+
+	echo "[${task.tag}] completed!"
+	"""
+}
+
 // capsule - Preprocess Ecephys
 process capsule_preprocess_ecephys_3 {
 	tag 'capsule-0874799'
@@ -116,7 +175,7 @@ process capsule_preprocess_ecephys_3 {
 	memory '64 GB'
 
 	input:
-	path 'capsule/data/' from capsule_hybrid_generation_ecephys_2_to_capsule_preprocess_ecephys_3_4.flatten()
+	path 'capsule/data/' from capsule_deepinterp_ecephys_to_capsule_preprocess.flatten()
 	path 'capsule/data/ecephys_session' from ecephys_to_preprocess_ecephys_5.collect()
 
 	output:
