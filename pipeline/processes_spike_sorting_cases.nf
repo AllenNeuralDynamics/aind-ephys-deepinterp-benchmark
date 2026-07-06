@@ -448,3 +448,98 @@ workflow wavpack_2_25 {
     emit:
         wv225_results = sorter_results_ch.map { it -> tuple('wv-2.25', it[1]) }
 }
+
+
+// DeepInterpolation denoising step (GPU). Runs on the raw hybrid recording before
+// preprocessing -- matching how the model was trained (raw AP band, per-channel
+// z-scored). Mirrors compress_wavpack but uses a CUDA container.
+process deepinterp_denoise {
+    tag 'deepinterp'
+    def container_name = "ghcr.io/allenneuraldynamics/aind-ephys-deepinterpolation-inference:${params.container_tag}"
+    container container_name
+
+    input:
+    val max_duration_minutes
+    path ecephys_session_input, stageAs: 'capsule/data/ecephys_session'
+    path job_dispatch_results, stageAs: 'capsule/data/*'
+    val deepinterp_args
+
+    output:
+    path 'capsule/results/*', emit: results
+
+    script:
+    """
+    #!/usr/bin/env bash
+    set -e
+
+    if [[ ${params.executor} == "slurm" ]]; then
+        # make sure N_JOBS matches allocated CPUs on SLURM
+        export N_JOBS_EXT=${task.cpus}
+    fi
+
+    mkdir -p capsule
+    mkdir -p capsule/data
+    mkdir -p capsule/results
+    mkdir -p capsule/scratch
+
+    echo "[${task.tag}] cloning git repo..."
+    ${gitCloneFunction()}
+    clone_repo "${params.versions['DEEPINTERP_REPO']}" "${params.versions['DEEPINTERP_COMMIT']}"
+
+    echo "[${task.tag}] running capsule..."
+    cd capsule/code
+    chmod +x run
+    ./run ${deepinterp_args}
+
+    echo "[${task.tag}] completed!"
+    """
+}
+
+
+// DeepInterpolation case: deepinterp_denoise -> preprocessing -> spike sorting
+workflow deepinterp {
+    take:
+        max_duration_minutes // Max duration for the recordings
+        ecephys_input_ch
+        hybrid_recordings_ch
+        sorter
+        preprocessing_args
+        spikesorting_args
+        deepinterp_args
+
+    main:
+        deepinterp_ch = deepinterp_denoise(
+            max_duration_minutes,
+            ecephys_input_ch.collect(),
+            hybrid_recordings_ch.flatten(),
+            deepinterp_args
+        )
+        preprocess_ch = preprocessing(
+            max_duration_minutes,
+            ecephys_input_ch.collect(),
+            deepinterp_ch.results,
+            preprocessing_args
+        )
+        if (sorter == 'kilosort25' || sorter == 'ks25') {
+            sorter_results_ch = spikesort_kilosort25(
+                max_duration_minutes,
+                preprocess_ch.results,
+                spikesorting_args
+            )
+        } else if (sorter == 'kilosort4' || sorter == 'ks4') {
+            sorter_results_ch = spikesort_kilosort4(
+                max_duration_minutes,
+                preprocess_ch.results,
+                spikesorting_args
+            )
+        } else if (sorter == 'spykingcircus2' || sorter == 'sc2') {
+            sorter_results_ch = spikesort_spykingcircus2(
+                max_duration_minutes,
+                preprocess_ch.results,
+                spikesorting_args
+            )
+        }
+
+    emit:
+        deepinterp_results = sorter_results_ch.map { it -> tuple('deepinterp', it[1]) }
+}
