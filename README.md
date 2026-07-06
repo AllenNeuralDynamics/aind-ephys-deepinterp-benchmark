@@ -3,6 +3,11 @@
 
 Hybrid benchmark pipeline with [SpikeInterface](https://github.com/SpikeInterface/spikeinterface).
 
+> **This fork adds Application 3: DeepInterpolation denoising** (`main_deepinterp.nf`) — it benchmarks
+> spike sorting with and without a trained
+> [DeepInterpolation](https://github.com/AllenNeuralDynamics/aind-ephys-deepinterpolation-inference)
+> denoising step. See [Application 3](#application-3-deepinterpolation-denoising).
+
 The pipeline is based on [Nextflow](https://www.nextflow.io/) and it includes the following common steps:
 
 - [job-dispatch](https://github.com/AllenNeuralDynamics/aind-ephys-job-dispatch/): generates a list of JSON files to be processed in parallel. Parallelization is performed over multiple probes and multiple shanks (e.g., for NP2-4shank probes). The steps from `hybrid-generation` to `spike-sorting` are run in parallel.
@@ -31,6 +36,19 @@ The *spike sorting cases* include:
   - [kilosort2.5](https://github.com/AllenNeuralDynamics/aind-ephys-spikesort-kilosort25/)
   - [kilosort4](https://github.com/AllenNeuralDynamics/aind-ephys-spikesort-kilosort4/)
   - [spykingcircus2](https://github.com/AllenNeuralDynamics/aind-ephys-spikesort-spykingcircus2/)
+
+### Application 3: DeepInterpolation denoising
+
+Compares spike sorting on the raw hybrid recording (`lossless` baseline) against the same recording
+after a trained **DeepInterpolation** denoising step. The *spike sorting cases* are:
+
+- `lossless`: [preprocessing](https://github.com/AllenNeuralDynamics/aind-ephys-preprocessing/) -> spike sorting (baseline)
+- `deepinterp`: [deepinterpolation](https://github.com/AllenNeuralDynamics/aind-ephys-deepinterpolation-inference/) -> [preprocessing](https://github.com/AllenNeuralDynamics/aind-ephys-preprocessing/) -> spike sorting
+
+The DeepInterpolation model was trained on raw AP-band traces (per-channel z-scored, no CMR/filter),
+so it runs on the raw hybrid recording *before* preprocessing — the same slot `compress` occupies in
+Application 2. Run with `main_deepinterp.nf` (default `--sorting_cases "lossless+deepinterp"`,
+`--sorter kilosort4`).
 
 
 # Input
@@ -75,6 +93,12 @@ For the `spike sorter comparison` pipeline:
 For the `lossy compression` pipeline:
 ```bash
 --sorter      Which sorter to run after compression (e.g. "kilosort4")
+```
+
+For the `deepinterpolation` pipeline (`main_deepinterp.nf`):
+```bash
+--sorter         Which sorter to run (e.g. "kilosort4")
+--sorting_cases  Which cases to run, "+"-separated (default: "lossless+deepinterp")
 ```
 
 ## Process-specific parameters
@@ -150,6 +174,16 @@ The steps that accept additional arguments are:
                         Default is None (end of recording)
 ```
 
+### `deepinterp_args`:
+
+```bash
+  --checkpoint CHECKPOINT       Path to a di_ephys best_model.pt checkpoint. Defaults to the bundled champion.
+  --device DEVICE               torch device (cuda|cpu). Default: cuda
+  --batch-size BATCH_SIZE       Frames per forward pass. Default: 256
+  --chunk-duration DURATION     SpikeInterface save chunk size. Default: 1s
+  --norm-sample-seconds SECONDS Seconds sampled across the recording to estimate per-channel z-score stats. Default: 60
+```
+
 
 # Deployments
 
@@ -205,6 +239,17 @@ DATA_PATH=path/to/data_spikeglx RESULTS_PATH=path/to/results_spikeglx \
     run main_sorters.nf --sorters "kilosort4+spykingcircus2" \
     --job_dispatch_args "--input spikeglx" --preprocessing_args "--debug --debug-duration 120"
     
+```
+
+
+For the DeepInterpolation benchmark (Application 3), comparing Kilosort4 sorting with vs. without
+DeepInterpolation on AIND NP1 sessions (debug mode, 120-second snippet):
+
+```bash
+DATA_PATH=path/to/np1_sessions RESULTS_PATH=path/to/results \
+    nextflow -C nextflow_local_docker.config \
+    run main_deepinterp.nf --sorter kilosort4 \
+    --job_dispatch_args "--input aind" --preprocessing_args "--debug --debug-duration 120"
 ```
 
 
