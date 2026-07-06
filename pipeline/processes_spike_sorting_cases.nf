@@ -455,7 +455,11 @@ workflow wavpack_2_25 {
 // z-scored). Mirrors compress_wavpack but uses a CUDA container.
 process deepinterp_denoise {
     tag 'deepinterp'
-    def container_name = "ghcr.io/allenneuraldynamics/aind-ephys-deepinterpolation-inference:${params.container_tag}"
+    // Reuse the Kilosort4 GPU image (CUDA + torch + SpikeInterface): it already exists on
+    // ghcr with the si-<version> tag and has everything the DeepInterpolation code needs.
+    // The DI code (+ bundled checkpoint) is cloned in via DEEPINTERP_REPO/COMMIT, so no
+    // separate DeepInterpolation image needs to be built/published.
+    def container_name = "ghcr.io/allenneuraldynamics/aind-ephys-spikesort-kilosort4:${params.container_tag}"
     container container_name
 
     input:
