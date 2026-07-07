@@ -3,7 +3,7 @@
 
 nextflow.enable.dsl = 1
 
-params.ecephys_url = 's3://aind-private-data-prod-o5171v/ecephys_715710_2024-07-16_12-58-34'
+params.ecephys_url = 's3://aind-ephys-data/ecephys_644864_2023-01-31_15-27-43'
 // Step-arg defaults so a no-parameter (API) launch runs a short DI-arm smoke:
 // job_dispatch clips the recording to 30 s in debug mode BEFORE deepinterp, keeping
 // the DeepInterpolation step (which runs on the full recording) tractable.
