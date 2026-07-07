@@ -153,7 +153,7 @@ process capsule_deepinterp_ecephys {
 
 	echo "[${task.tag}] cloning git repo..."
 	git clone "https://\$GIT_ACCESS_TOKEN@\$GIT_HOST/capsule-6392476.git" capsule-repo
-	git -C capsule-repo checkout 8233a09534606750a240b24b6cd6d9509eba4bc9 --quiet
+	git -C capsule-repo checkout 9e7893ee70832f3523925ac705d55e56f47338f1 --quiet
 	mv capsule-repo/code capsule/code
 	rm -rf capsule-repo
 
