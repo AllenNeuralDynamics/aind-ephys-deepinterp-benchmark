@@ -62,7 +62,7 @@ process capsule_job_dispatch_ecephys_1 {
 
 	echo "[${task.tag}] cloning git repo..."
 	git clone "https://\$GIT_ACCESS_TOKEN@\$GIT_HOST/capsule-5832718.git" capsule-repo
-	git -C capsule-repo checkout 628f38566b5545ba5dba8b8382cab2d18ccff743 --quiet
+	git -C capsule-repo checkout 26299a341fde068438c4435b73e40fa3888e335a --quiet
 	mv capsule-repo/code capsule/code
 	rm -rf capsule-repo
 
